@@ -18,6 +18,7 @@ internal static class Program {
                 case "--brightness": return DiagnosticCommands.Brightness(options);
                 case "--clear": return DiagnosticCommands.Clear(options);
                 case "--reset": return DiagnosticCommands.Reset(options);
+                case "--render": return DiagnosticCommands.RenderScenarios(options);
                 case "--dump-sensors": return DiagnosticCommands.DumpSensors(options);
                 default:
                     Log.Error($"Unknown command: {args[0]}");

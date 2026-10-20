@@ -44,9 +44,7 @@ internal static class DiagnosticCommands {
         using var bitmap = Render.TestPattern.Draw(settings.Describe());
         if (savePath == null) return ShowBitmap(settings, bitmap, repeat);
 
-        using (var file = File.Create(Path.GetFullPath(savePath))) {
-            bitmap.Encode(file, SKEncodedImageFormat.Png, 100);
-        }
+        SavePng(bitmap, Path.GetFullPath(savePath));
         Log.Info($"Test pattern written to {Path.GetFullPath(savePath)}");
         return 0;
     }
@@ -150,6 +148,43 @@ internal static class DiagnosticCommands {
         return 0;
     }
 
+    /// --render SCENARIO|all OUTPUT [--compare MOCKUPS_DIR]: OUTPUT is a PNG file, or a folder for "all".
+    /// --compare also writes NAME-compare.png (mockup v3-NAME.png | render | amplified difference) next to each render.
+    public static int RenderScenarios(CommandArgs args) {
+        var names = string.Join(", ", FakeScenarios.All.Select(scenario => scenario.Name));
+        var requested = args.Positional(0) ?? throw new UsageException($"--render needs a scenario ({names}) or all");
+        var output = args.Positional(1) ?? throw new UsageException("--render needs an output path");
+        var mockups = args.String("compare");
+        args.RejectUnknown();
+
+        var all = requested == "all";
+        var scenarios = FakeScenarios.All.Where(scenario => all || scenario.Name == requested).ToList();
+        if (scenarios.Count == 0) throw new UsageException($"Unknown scenario {requested} ({names})");
+
+        using var renderer = new Render.DashboardRenderer();
+        foreach (var (name, snapshot) in scenarios) {
+            var path = Path.GetFullPath(all ? Path.Combine(output, $"{name}.png") : output);
+            var stopwatch = Stopwatch.StartNew();
+            var bitmap = renderer.Render(snapshot);
+            var elapsed = stopwatch.Elapsed.TotalMilliseconds;
+            SavePng(bitmap, path);
+            Log.Info(string.Create(CultureInfo.InvariantCulture, $"Rendered {name} in {elapsed:F1} ms: {path}"));
+
+            if (mockups == null) continue;
+            var mockupPath = Path.Combine(Path.GetFullPath(mockups), $"v3-{name}.png");
+            using var mockup = SKBitmap.Decode(mockupPath);
+            if (mockup == null) {
+                Log.Error($"Cannot decode {mockupPath}");
+                return 1;
+            }
+            using var comparison = Render.MockupComparison.Compose(mockup, bitmap, out var meanDifference);
+            var comparisonPath = Path.Combine(Path.GetDirectoryName(path) ?? "", $"{Path.GetFileNameWithoutExtension(path)}-compare.png");
+            SavePng(comparison, comparisonPath);
+            Log.Info(string.Create(CultureInfo.InvariantCulture, $"Compared {name}: mean difference {meanDifference:F2}/255, {comparisonPath}"));
+        }
+        return 0;
+    }
+
     /// --dump-sensors [PATH]: defaults to sensors.txt in the current directory. Run as administrator.
     public static int DumpSensors(CommandArgs args) {
         var path = Path.GetFullPath(args.Positional(0) ?? "sensors.txt");
@@ -159,6 +194,12 @@ internal static class DiagnosticCommands {
         SensorDump.Write(path);
         Log.Info($"Sensors written to {path}");
         return 0;
+    }
+
+    private static void SavePng(SKBitmap bitmap, string path) {
+        if (Path.GetDirectoryName(path) is { Length: > 0 } directory) Directory.CreateDirectory(directory);
+        using var file = File.Create(path);
+        bitmap.Encode(file, SKEncodedImageFormat.Png, 100);
     }
 
     private static DisplaySettings ReadDisplaySettings(CommandArgs args, bool landscapeOnly) {
