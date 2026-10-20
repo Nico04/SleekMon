@@ -1,0 +1,20 @@
+# Build
+bin/
+obj/
+out/
+publish/
+*.user
+*.suo
+
+# IDE
+.vs/
+.idea/
+*.DotSettings.user
+
+# Tests / coverage
+TestResults/
+coverage*/
+
+# Runtime
+logs/
+*.log
