@@ -1,5 +1,6 @@
 using System.Diagnostics;
 using System.Globalization;
+using System.Security.AccessControl;
 
 namespace SleekMon;
 
@@ -48,7 +49,10 @@ internal static class Log {
         DeleteOldFiles();
 
         var path = Path.Combine(LogDirectory, $"sleekmon-{day.ToString("yyyyMMdd", CultureInfo.InvariantCulture)}.log");
-        var stream = new FileStream(path, FileMode.Append, FileAccess.Write, FileShare.ReadWrite | FileShare.Delete);
+        // Append-only access: Windows writes each line at the current end of the file, even when another process
+        // appended since (a plain FileMode.Append stream writes at its own position and overwrites the other lines)
+        var stream = new FileInfo(path).Create(FileMode.Append, FileSystemRights.AppendData,
+            FileShare.ReadWrite | FileShare.Delete, 4096, FileOptions.None, null);
         _writer = new StreamWriter(stream) { AutoFlush = true };
         _writerDay = day;
         return _writer;
