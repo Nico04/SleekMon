@@ -19,6 +19,8 @@ internal static class Program {
                 case "--clear": return DiagnosticCommands.Clear(options);
                 case "--reset": return DiagnosticCommands.Reset(options);
                 case "--render": return DiagnosticCommands.RenderScenarios(options);
+                case "--run-fake": return DiagnosticCommands.RunFake(options);
+                case "--bench-diff": return DiagnosticCommands.BenchDiff(options);
                 case "--dump-sensors": return DiagnosticCommands.DumpSensors(options);
                 default:
                     Log.Error($"Unknown command: {args[0]}");

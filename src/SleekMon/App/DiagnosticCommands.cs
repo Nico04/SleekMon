@@ -185,6 +185,102 @@ internal static class DiagnosticCommands {
         return 0;
     }
 
+    /// --run-fake [--tile WxH] [--duration MIN] [--power-cycle SEC]: the real 1 Hz loop (render, diff, send) on simulated
+    /// values. --power-cycle turns the screen off and on every SEC seconds (does it keep its image?). Statistics in the log.
+    public static int RunFake(CommandArgs args) {
+        var settings = ReadDisplaySettings(args, landscapeOnly: true);
+        var (tileWidth, tileHeight) = ParseTile(args.String("tile") ?? "16x16");
+        var duration = TimeSpan.FromMinutes(args.Int("duration", 2, 1, 24 * 60));
+        var powerCycle = args.Int("power-cycle", 0, 0, 3600);
+        args.RejectUnknown();
+
+        var options = new DisplayWorkerOptions {
+            ForcedPort = settings.ForcedPort,
+            Serial = settings.Options,
+            Orientation = settings.Orientation,
+            TileWidth = tileWidth,
+            TileHeight = tileHeight,
+            // Short runs get statistics too
+            StatisticsPeriod = TimeSpan.FromSeconds(15)
+        };
+        Log.Info($"Fake run: {duration.TotalMinutes} min, tiles {tileWidth}×{tileHeight}, power cycle {powerCycle} s, {settings.Describe()}");
+
+        using var renderer = new Render.DashboardRenderer();
+        using var worker = new DisplayWorker(options);
+        worker.SetBrightness(settings.BrightnessPercent);
+        worker.Start();
+
+        var random = new Random(1);
+        var snapshot = FakeScenarios.All[0].Snapshot;
+        var start = DateTime.UtcNow;
+        var lastTick = start;
+        var on = true;
+        for (var tick = 0; DateTime.UtcNow - start < duration; tick++) {
+            // A long gap between ticks means the PC slept: the port handle may be stale
+            var now = DateTime.UtcNow;
+            if (now - lastTick > TimeSpan.FromSeconds(5)) {
+                Log.Info($"Time gap of {(now - lastTick).TotalSeconds:F0} s, reconnecting");
+                worker.RequestReconnect();
+            }
+            lastTick = now;
+
+            if (powerCycle > 0 && tick > 0 && tick % powerCycle == 0) {
+                on = !on;
+                worker.SetPower(on);
+                Log.Info(on ? "Power on" : "Power off");
+            }
+
+            snapshot = FakeScenarios.Wander(snapshot, random);
+            worker.SubmitFrame(renderer.Render(snapshot));
+
+            // Next whole second, so that the clock changes on time
+            Thread.Sleep(1000 - DateTime.Now.Millisecond);
+        }
+        return 0;
+    }
+
+    /// --bench-diff [--frames N]: without the screen, what the tile diff would send on simulated frames, per tile size.
+    public static int BenchDiff(CommandArgs args) {
+        var frames = args.Int("frames", 120, 2, 10_000);
+        args.RejectUnknown();
+
+        // Same simulated frames for every tile size
+        using var renderer = new Render.DashboardRenderer();
+        var random = new Random(1);
+        var snapshot = FakeScenarios.All[0].Snapshot;
+        var pixels = new List<byte[]>();
+        for (var i = 0; i < frames; i++) {
+            snapshot = FakeScenarios.Wander(snapshot, random);
+            pixels.Add(Rgb565.FromBitmap(renderer.Render(snapshot)));
+        }
+
+        foreach (var (tileWidth, tileHeight) in new[] { (8, 8), (16, 16), (32, 32), (48, 32), (64, 32) }) {
+            long bytes = 0, rects = 0;
+            var stopwatch = Stopwatch.StartNew();
+            for (var i = 1; i < frames; i++) {
+                foreach (var rect in FrameDiff.ChangedRects(pixels[i - 1], pixels[i], DisplayWorker.Width, DisplayWorker.Height, tileWidth, tileHeight)) {
+                    bytes += rect.Width * rect.Height * 2;
+                    rects++;
+                }
+            }
+            var updates = frames - 1;
+            Log.Info(string.Create(CultureInfo.InvariantCulture,
+                $"Tiles {tileWidth}×{tileHeight}: per update {bytes / updates} bytes in {(double)rects / updates:F1} rects, " +
+                $"diff {stopwatch.Elapsed.TotalMilliseconds / updates:F2} ms"));
+        }
+        return 0;
+    }
+
+    private static (int Width, int Height) ParseTile(string text) {
+        var parts = text.Split('x');
+        if (parts.Length == 2 &&
+            int.TryParse(parts[0], NumberStyles.None, CultureInfo.InvariantCulture, out var width) && width is > 0 and <= DisplayWorker.Width &&
+            int.TryParse(parts[1], NumberStyles.None, CultureInfo.InvariantCulture, out var height) && height is > 0 and <= DisplayWorker.Height) {
+            return (width, height);
+        }
+        throw new UsageException("--tile must be WIDTHxHEIGHT, e.g. 48x32");
+    }
+
     /// --dump-sensors [PATH]: defaults to sensors.txt in the current directory. Run as administrator.
     public static int DumpSensors(CommandArgs args) {
         var path = Path.GetFullPath(args.Positional(0) ?? "sensors.txt");

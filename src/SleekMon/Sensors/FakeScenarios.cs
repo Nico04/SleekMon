@@ -42,4 +42,30 @@ internal static class FakeScenarios {
             Timestamp = new DateTime(2026, 10, 19, 23, 5, 0)
         })
     ];
+
+    /// Random walk around a snapshot, timestamped now, so that values change every second like real sensors.
+    public static SensorSnapshot Wander(SensorSnapshot snapshot, Random random) {
+        var vramLoad = Step(random, snapshot.VramLoad, 1, 5, 100);
+        var ramLoad = Step(random, snapshot.RamLoad, 0.5, 20, 100);
+        return snapshot with {
+            CpuLoad = Step(random, snapshot.CpuLoad, 8, 0, 100),
+            CpuTemp = Step(random, snapshot.CpuTemp, 1.5, 30, 95),
+            CpuFanRpm = Step(random, snapshot.CpuFanRpm, 40, 600, 2400),
+            GpuLoad = Step(random, snapshot.GpuLoad, 6, 0, 100),
+            GpuTemp = Step(random, snapshot.GpuTemp, 1.5, 30, 95),
+            GpuFanRpm = Step(random, snapshot.GpuFanRpm, 40, 600, 3000),
+            VramLoad = vramLoad,
+            VramUsedGb = vramLoad / 100 * snapshot.VramTotalGb,
+            Fps = Step(random, snapshot.Fps, 6, 20, 240),
+            RamLoad = ramLoad,
+            RamUsedGb = ramLoad / 100 * snapshot.RamTotalGb,
+            CaseTemp = Step(random, snapshot.CaseTemp, 0.3, 25, 60),
+            CaseFanRpm = Step(random, snapshot.CaseFanRpm, 20, 400, 1800),
+            TopProcessCpu = Step(random, snapshot.TopProcessCpu, 4, 0, 100),
+            Timestamp = DateTime.Now
+        };
+    }
+
+    private static double? Step(Random random, double? value, double amplitude, double min, double max) =>
+        value is { } v ? Math.Clamp(v + (random.NextDouble() * 2 - 1) * amplitude, min, max) : null;
 }
