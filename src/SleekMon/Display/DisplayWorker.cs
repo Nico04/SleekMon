@@ -7,6 +7,7 @@ namespace SleekMon.Display;
 
 internal enum ConnectionState {
     Disconnected,
+    /// Port open, first full frame not shown yet.
     Connecting,
     Connected
 }
@@ -56,6 +57,8 @@ internal sealed class DisplayWorker : IDisposable {
     private readonly byte[] _rectBuffer = new byte[FrameBytes];
     private readonly TransferStatistics _statistics = new();
     private string? _lastProblem;
+    /// Environment.TickCount64 of the next connection attempt.
+    private long _nextAttempt;
 
     private volatile ConnectionState _state = ConnectionState.Disconnected;
 
@@ -116,11 +119,22 @@ internal sealed class DisplayWorker : IDisposable {
                 _reconnectRequested = false;
             }
             if (stopping) break;
-            if (reconnect) Disconnect();
+            if (reconnect) {
+                Disconnect();
+                _nextAttempt = 0;
+            }
 
-            if (_display == null && !TryConnect()) {
-                _wake.WaitOne(_options.RetryDelay);
-                continue;
+            if (_display == null) {
+                // Every submitted frame wakes the thread: keep the retry pace anyway
+                var wait = _nextAttempt - Environment.TickCount64;
+                if (wait > 0) {
+                    _wake.WaitOne(TimeSpan.FromMilliseconds(wait));
+                    continue;
+                }
+                if (!TryConnect()) {
+                    _nextAttempt = Environment.TickCount64 + (long)_options.RetryDelay.TotalMilliseconds;
+                    continue;
+                }
             }
 
             try {
@@ -196,6 +210,7 @@ internal sealed class DisplayWorker : IDisposable {
         _latest.CopyTo(_shown, 0);
         _shownKnown = true;
         _statistics.Add(bytes, rects.Count, stopwatch.Elapsed);
+        SetState(ConnectionState.Connected);
     }
 
     [MemberNotNullWhen(true, nameof(_display))]
@@ -207,7 +222,7 @@ internal sealed class DisplayWorker : IDisposable {
             return false;
         }
 
-        SetState(ConnectionState.Connecting);
+        // The port may still be listed for a moment after unplugging: opening fails, the state stays Disconnected
         try {
             _display = RevADisplay.Open(port, _options.Serial);
             _display.SetOrientation(_options.Orientation);
@@ -225,7 +240,8 @@ internal sealed class DisplayWorker : IDisposable {
         _sentBrightness = null;
         _lastProblem = null;
         Log.Info($"Screen connected on {port}");
-        SetState(ConnectionState.Connected);
+        // Connected once the first full frame is shown
+        SetState(ConnectionState.Connecting);
         return true;
     }
 
