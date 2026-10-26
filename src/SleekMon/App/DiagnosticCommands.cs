@@ -270,8 +270,8 @@ internal static class DiagnosticCommands {
         string Value(double? value) => Render.Formatter.Number(Render.Formatter.Round(value));
         return $"CPU {Value(snapshot.CpuLoad)}% {Value(snapshot.CpuTemp)}° {Value(snapshot.CpuFanRpm)} RPM · " +
             $"GPU {Value(snapshot.GpuLoad)}% {Value(snapshot.GpuTemp)}° {Value(snapshot.GpuFanRpm)} RPM · " +
-            $"VRAM {Value(snapshot.VramLoad)}% {Render.Formatter.UsedOfTotal(snapshot.VramUsedGb, snapshot.VramTotalGb)} GB · " +
-            $"RAM {Value(snapshot.RamLoad)}% {Render.Formatter.UsedOfTotal(snapshot.RamUsedGb, snapshot.RamTotalGb)} GB · " +
+            $"VRAM {Value(snapshot.VramLoad)}% {Value(snapshot.VramUsedGb)}{Render.Formatter.OfTotal(snapshot.VramTotalGb)} · " +
+            $"RAM {Value(snapshot.RamLoad)}% {Value(snapshot.RamUsedGb)}{Render.Formatter.OfTotal(snapshot.RamTotalGb)} · " +
             $"case {Value(snapshot.CaseTemp)}° {Value(snapshot.CaseFanRpm)} RPM · limited {snapshot.SensorsLimited}";
     }
 
@@ -315,6 +315,15 @@ internal static class DiagnosticCommands {
             return (width, height);
         }
         throw new UsageException("--tile must be WIDTHxHEIGHT, e.g. 48x32");
+    }
+
+    /// --bench-sensors [--cycles N]: update cost of each piece of hardware, in the log. Run as administrator.
+    public static int BenchSensors(CommandArgs args) {
+        var cycles = args.Int("cycles", 20, 1, 1000);
+        args.RejectUnknown();
+
+        SensorBenchmark.Run(cycles);
+        return 0;
     }
 
     /// --dump-sensors [PATH]: defaults to sensors.txt in the current directory. Run as administrator.

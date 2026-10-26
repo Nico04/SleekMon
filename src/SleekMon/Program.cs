@@ -23,6 +23,7 @@ internal static class Program {
                 case "--run": return DiagnosticCommands.Run(options);
                 case "--bench-diff": return DiagnosticCommands.BenchDiff(options);
                 case "--dump-sensors": return DiagnosticCommands.DumpSensors(options);
+                case "--bench-sensors": return DiagnosticCommands.BenchSensors(options);
                 default:
                     Log.Error($"Unknown command: {args[0]}");
                     return 2;
