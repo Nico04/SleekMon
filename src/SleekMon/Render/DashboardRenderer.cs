@@ -84,14 +84,15 @@ internal sealed class DashboardRenderer : IDisposable {
         var (inner, rows) = DrawLoadCard(canvas, GpuCard, _icons.Gpu, "GPU", snapshot.GpuLoad, snapshot.GpuTemp);
         if (Formatter.Round(snapshot.Fps) is { } fps) DrawFpsPill(canvas, fps, inner.Right, rows[0]);
 
-        // Footer: "62%" colored, then " VRAM · 7.4/12 GB" muted
+        // Footer: "62%" colored, " VRAM · " muted, used amount white, " / 12 GB" muted
         var vram = Formatter.Round(snapshot.VramLoad);
         var percentFont = _type.Font(Weight.Bold, FooterTextSize);
         var detailFont = _type.Font(Weight.Medium, FooterTextSize);
         var baseline = BaselineOf(rows[3], FooterHeight, Typography.Box(percentFont), Typography.Box(detailFont));
         var x = inner.Left + DrawText(canvas, Formatter.Percent(vram), inner.Left, baseline, percentFont,
             Theme.ValueColor(Theme.MemoryLevel(vram)));
-        DrawText(canvas, $" VRAM · {Formatter.UsedOfTotal(snapshot.VramUsedGb, snapshot.VramTotalGb)} GB", x, baseline, detailFont, Theme.Muted);
+        x += DrawText(canvas, " VRAM · ", x, baseline, detailFont, Theme.Muted);
+        DrawUsedOfTotal(canvas, snapshot.VramUsedGb, snapshot.VramTotalGb, x, baseline, detailFont);
 
         DrawFan(canvas, snapshot.GpuFanRpm, inner.Right, rows[3], FooterHeight, alignRight: true);
     }
@@ -163,8 +164,13 @@ internal sealed class DashboardRenderer : IDisposable {
         DrawText(canvas, "%", inner.Left + numberWidth + 2, baseline, unitFont, Theme.UnitColor(level));
 
         DrawBar(canvas, inner.Left, rows[2], inner.Width, 6, 12, 1.5f, load, Theme.SegmentColor(level));
-        DrawText(canvas, $"{Formatter.UsedOfTotal(snapshot.RamUsedGb, snapshot.RamTotalGb)} GB", inner.Left,
-            rows[3] + footerBox.Above, footerFont, Theme.Muted);
+        DrawUsedOfTotal(canvas, snapshot.RamUsedGb, snapshot.RamTotalGb, inner.Left, rows[3] + footerBox.Above, footerFont);
+    }
+
+    /// "31 / 32 GB": the used amount stands out in white, the rest muted.
+    private void DrawUsedOfTotal(SKCanvas canvas, double? used, double? total, float x, float baseline, SKFont font) {
+        x += DrawText(canvas, Formatter.WholeGigabytes(used), x, baseline, font, used != null ? Theme.Text : Theme.Dim);
+        DrawText(canvas, Formatter.OfTotal(total), x, baseline, font, Theme.Muted);
     }
 
     private void DrawCase(SKCanvas canvas, SensorSnapshot snapshot) {
@@ -226,17 +232,22 @@ internal sealed class DashboardRenderer : IDisposable {
     }
 
     /// Fan icon and RPM, vertically centered in the row; x is the right edge when right-aligned.
+    /// A spinning fan's number stands out in white; stopped (green) and unavailable (dim) keep one color.
     private void DrawFan(SKCanvas canvas, double? rpmValue, float x, float top, float height, bool alignRight) {
+        const string unit = " RPM";
         var rpm = Formatter.Round(rpmValue);
         var color = Theme.FanColor(rpm);
         var font = _type.Font(Weight.SemiBold, FooterTextSize);
-        var text = Formatter.Rpm(rpm);
-        var left = alignRight ? x - (FanIconSize + FanGap + Typography.Measure(text, font)) : x;
+        var number = Formatter.Number(rpm);
+        var left = alignRight ? x - (FanIconSize + FanGap + Typography.Measure(number + unit, font)) : x;
 
         var groupHeight = FanGroupHeight();
         var groupTop = top + (height - groupHeight) / 2;
+        var baseline = CenteredBaseline(groupTop, groupHeight, Typography.Box(font));
         DrawIcon(canvas, _icons.Fan, left, groupTop + (groupHeight - FanIconSize) / 2, FanIconSize, color);
-        DrawText(canvas, text, left + FanIconSize + FanGap, CenteredBaseline(groupTop, groupHeight, Typography.Box(font)), font, color);
+        var textX = left + FanIconSize + FanGap;
+        textX += DrawText(canvas, number, textX, baseline, font, rpm > 0 ? Theme.Text : color);
+        DrawText(canvas, unit, textX, baseline, font, color);
     }
 
     private float FanGroupHeight() => Math.Max(FanIconSize, Typography.Box(_type.Font(Weight.SemiBold, FooterTextSize)).Height);

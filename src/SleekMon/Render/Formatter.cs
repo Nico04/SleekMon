@@ -19,14 +19,14 @@ internal static class Formatter {
     /// "76°", or "--" without the degree sign.
     public static string Temperature(int? value) => value is { } v ? $"{v.ToString(Invariant)}°" : Missing;
 
-    public static string Rpm(int? value) => $"{Number(value)} RPM";
-
     /// One decimal: "7.8".
     public static string Gigabytes(double? value) => value?.ToString("0.0", Invariant) ?? Missing;
 
-    /// "7.4/12": the total is rounded to a whole number (the OS reports a bit less than the installed capacity).
-    public static string UsedOfTotal(double? used, double? total) =>
-        $"{Gigabytes(used)}/{total?.ToString("0", Invariant) ?? Missing}";
+    /// Whole gigabytes: "31" for 30.6.
+    public static string WholeGigabytes(double? value) => Number(Round(value));
+
+    /// " / 32 GB", after the used amount. Whole number: the OS reports a bit less than the installed capacity.
+    public static string OfTotal(double? total) => $" / {WholeGigabytes(total)} GB";
 
     public static string Time(DateTime time) => time.ToString("HH:mm", Invariant);
 
