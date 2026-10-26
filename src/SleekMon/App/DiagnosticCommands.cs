@@ -194,6 +194,45 @@ internal static class DiagnosticCommands {
         var powerCycle = args.Int("power-cycle", 0, 0, 3600);
         args.RejectUnknown();
 
+        Log.Info($"Fake run: {duration.TotalMinutes} min, tiles {tileWidth}×{tileHeight}, power cycle {powerCycle} s, {settings.Describe()}");
+        var random = new Random(1);
+        var snapshot = FakeScenarios.All[0].Snapshot;
+        var on = true;
+        RunLoop(settings, duration, tileWidth, tileHeight, (tick, worker) => {
+            if (powerCycle > 0 && tick > 0 && tick % powerCycle == 0) {
+                on = !on;
+                worker.SetPower(on);
+                Log.Info(on ? "Power on" : "Power off");
+            }
+            snapshot = FakeScenarios.Wander(snapshot, random);
+            return snapshot;
+        });
+        return 0;
+    }
+
+    /// --run [--duration MIN]: real sensors on the screen, motherboard sensors from AppConfig. Run as administrator for
+    /// every sensor. The displayed values go to the log every 10 s, to compare with other tools.
+    public static int Run(CommandArgs args) {
+        var settings = ReadDisplaySettings(args, landscapeOnly: true);
+        var duration = TimeSpan.FromMinutes(args.Int("duration", 10, 1, 24 * 60));
+        args.RejectUnknown();
+
+        var config = AppConfig.Load();
+        Log.Info($"Run: {duration.TotalMinutes} min, {config.Sensors}, {settings.Describe()}");
+        using var sensors = new LhmSensorProvider(config.Sensors);
+        sensors.Start();
+        RunLoop(settings, duration, 16, 16, (tick, _) => {
+            // The clock shows the render time, not the reading time
+            var snapshot = sensors.Latest with { Timestamp = DateTime.Now };
+            if (tick % 10 == 0) Log.Info(Describe(snapshot));
+            return snapshot;
+        });
+        return 0;
+    }
+
+    /// The real 1 Hz loop: render, then hand the frame to the display thread. nextSnapshot runs once per tick.
+    private static void RunLoop(DisplaySettings settings, TimeSpan duration, int tileWidth, int tileHeight,
+        Func<int, DisplayWorker, SensorSnapshot> nextSnapshot) {
         var options = new DisplayWorkerOptions {
             ForcedPort = settings.ForcedPort,
             Serial = settings.Options,
@@ -203,18 +242,13 @@ internal static class DiagnosticCommands {
             // Short runs get statistics too
             StatisticsPeriod = TimeSpan.FromSeconds(15)
         };
-        Log.Info($"Fake run: {duration.TotalMinutes} min, tiles {tileWidth}×{tileHeight}, power cycle {powerCycle} s, {settings.Describe()}");
-
         using var renderer = new Render.DashboardRenderer();
         using var worker = new DisplayWorker(options);
         worker.SetBrightness(settings.BrightnessPercent);
         worker.Start();
 
-        var random = new Random(1);
-        var snapshot = FakeScenarios.All[0].Snapshot;
         var start = DateTime.UtcNow;
         var lastTick = start;
-        var on = true;
         for (var tick = 0; DateTime.UtcNow - start < duration; tick++) {
             // A long gap between ticks means the PC slept: the port handle may be stale
             var now = DateTime.UtcNow;
@@ -224,19 +258,21 @@ internal static class DiagnosticCommands {
             }
             lastTick = now;
 
-            if (powerCycle > 0 && tick > 0 && tick % powerCycle == 0) {
-                on = !on;
-                worker.SetPower(on);
-                Log.Info(on ? "Power on" : "Power off");
-            }
-
-            snapshot = FakeScenarios.Wander(snapshot, random);
-            worker.SubmitFrame(renderer.Render(snapshot));
+            worker.SubmitFrame(renderer.Render(nextSnapshot(tick, worker)));
 
             // Next whole second, so that the clock changes on time
             Thread.Sleep(1000 - DateTime.Now.Millisecond);
         }
-        return 0;
+    }
+
+    /// The values as displayed (rounded, same formats).
+    private static string Describe(SensorSnapshot snapshot) {
+        string Value(double? value) => Render.Formatter.Number(Render.Formatter.Round(value));
+        return $"CPU {Value(snapshot.CpuLoad)}% {Value(snapshot.CpuTemp)}° {Value(snapshot.CpuFanRpm)} RPM · " +
+            $"GPU {Value(snapshot.GpuLoad)}% {Value(snapshot.GpuTemp)}° {Value(snapshot.GpuFanRpm)} RPM · " +
+            $"VRAM {Value(snapshot.VramLoad)}% {Render.Formatter.UsedOfTotal(snapshot.VramUsedGb, snapshot.VramTotalGb)} GB · " +
+            $"RAM {Value(snapshot.RamLoad)}% {Render.Formatter.UsedOfTotal(snapshot.RamUsedGb, snapshot.RamTotalGb)} GB · " +
+            $"case {Value(snapshot.CaseTemp)}° {Value(snapshot.CaseFanRpm)} RPM · limited {snapshot.SensorsLimited}";
     }
 
     /// --bench-diff [--frames N]: without the screen, what the tile diff would send on simulated frames, per tile size.

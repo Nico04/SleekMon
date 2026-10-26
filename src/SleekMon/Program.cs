@@ -20,6 +20,7 @@ internal static class Program {
                 case "--reset": return DiagnosticCommands.Reset(options);
                 case "--render": return DiagnosticCommands.RenderScenarios(options);
                 case "--run-fake": return DiagnosticCommands.RunFake(options);
+                case "--run": return DiagnosticCommands.Run(options);
                 case "--bench-diff": return DiagnosticCommands.BenchDiff(options);
                 case "--dump-sensors": return DiagnosticCommands.DumpSensors(options);
                 default:
