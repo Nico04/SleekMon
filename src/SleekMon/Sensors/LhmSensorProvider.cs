@@ -106,6 +106,7 @@ internal sealed class LhmSensorProvider : ISensorProvider {
         private ISensor? _cpuLoad;
         private ISensor? _cpuTemperature;
         private ISensor? _cpuFan;
+        private ISensor[] _gpuEngines = [];
         private ISensor? _gpuLoad;
         private ISensor? _gpuTemperature;
         private ISensor? _gpuFan;
@@ -137,6 +138,9 @@ internal sealed class LhmSensorProvider : ISensorProvider {
                 // AMD Zen, then Intel
                 _cpuTemperature = Find(cpu, "Core (Tctl/Tdie)", SensorType.Temperature) ?? Find(cpu, "CPU Package", SensorType.Temperature),
                 _cpuFan = Find(superIo, selection.CpuFan, SensorType.Fan),
+                // Like Task Manager: the busiest engine Windows sees ("D3D 3D", "D3D Copy"…). The driver's "GPU Core" load
+                // reads much higher at idle (20 % against 5 %, RESEARCH § 4) and stays as a fallback
+                _gpuEngines = gpu?.Sensors.Where(sensor => sensor.SensorType == SensorType.Load && sensor.Name.StartsWith("D3D ", StringComparison.Ordinal)).ToArray() ?? [],
                 _gpuLoad = Find(gpu, "GPU Core", SensorType.Load),
                 _gpuTemperature = Find(gpu, "GPU Core", SensorType.Temperature),
                 // "GPU Fan 1" on NVIDIA, "GPU Fan" on AMD
@@ -155,7 +159,8 @@ internal sealed class LhmSensorProvider : ISensorProvider {
                 ("CPU load", bindings._cpuLoad, true),
                 ("CPU temperature", bindings._cpuTemperature, true),
                 ("CPU fan", bindings._cpuFan, selection.CpuFan != null),
-                ("GPU load", bindings._gpuLoad, true),
+                ("GPU engines", bindings._gpuEngines.FirstOrDefault(), true),
+                ("GPU load", bindings._gpuLoad, bindings._gpuEngines.Length == 0),
                 ("GPU temperature", bindings._gpuTemperature, true),
                 ("GPU fan", bindings._gpuFan, true),
                 ("VRAM used", bindings._vramUsed, true),
@@ -186,7 +191,7 @@ internal sealed class LhmSensorProvider : ISensorProvider {
                 CpuLoad = Value(_cpuLoad),
                 CpuTemp = Temperature(_cpuTemperature),
                 CpuFanRpm = Value(_cpuFan),
-                GpuLoad = Value(_gpuLoad),
+                GpuLoad = _gpuEngines.Select(Value).Max() ?? Value(_gpuLoad),
                 GpuTemp = Temperature(_gpuTemperature),
                 GpuFanRpm = Value(_gpuFan),
                 // Computed rather than read, so that it always matches the GB shown next to it
