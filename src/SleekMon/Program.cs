@@ -1,3 +1,4 @@
+using System.Windows.Forms;
 using SleekMon.App;
 
 namespace SleekMon;
@@ -37,8 +38,33 @@ internal static class Program {
         }
     }
 
+    /// The tray app, single instance: two would fight for the screen. A new instance (restart as administrator) waits
+    /// for the previous one to release the screen and exit.
     private static int RunApp() {
-        Log.Info("Tray app not implemented yet");
-        return 0;
+        using var instance = new Mutex(false, @"Local\SleekMon");
+        try {
+            if (!instance.WaitOne(TimeSpan.FromSeconds(10))) {
+                Log.Warn("Already running");
+                return 0;
+            }
+        } catch (AbandonedMutexException) {
+            // The previous instance died without releasing it: it is ours now
+        }
+
+        try {
+            Log.Info($"App started, administrator {Sensors.SensorDump.IsAdministrator()}");
+            AppDomain.CurrentDomain.UnhandledException += (_, e) => Log.Error("Unhandled exception", e.ExceptionObject as Exception);
+            Application.ThreadException += (_, e) => Log.Error("UI thread exception", e.Exception);
+            Application.SetUnhandledExceptionMode(UnhandledExceptionMode.CatchException);
+            Application.SetHighDpiMode(HighDpiMode.PerMonitorV2);
+            Application.EnableVisualStyles();
+            Application.SetCompatibleTextRenderingDefault(false);
+            using var app = new TrayApp();
+            Application.Run(app);
+            Log.Info("App stopped");
+            return 0;
+        } finally {
+            instance.ReleaseMutex();
+        }
     }
 }

@@ -45,6 +45,9 @@ internal sealed class DisplayWorker : IDisposable {
     private int _wantedBrightness = 30;
     private bool _reconnectRequested;
     private bool _stopping;
+    /// Incremented by each power or brightness change; the display thread publishes the version it applied.
+    private long _wantedVersion;
+    private long _appliedVersion;
 
     // Display thread only
     private RevADisplay? _display;
@@ -61,6 +64,7 @@ internal sealed class DisplayWorker : IDisposable {
     private long _nextAttempt;
 
     private volatile ConnectionState _state = ConnectionState.Disconnected;
+    private volatile string? _portName;
 
     public DisplayWorker(DisplayWorkerOptions options) {
         _options = options;
@@ -68,6 +72,9 @@ internal sealed class DisplayWorker : IDisposable {
     }
 
     public ConnectionState State => _state;
+
+    /// Port of the connected screen, null when disconnected.
+    public string? PortName => _portName;
 
     /// Raised on the display thread.
     public event Action<ConnectionState>? StateChanged;
@@ -86,14 +93,34 @@ internal sealed class DisplayWorker : IDisposable {
     public void SetBrightness(int percent) {
         ArgumentOutOfRangeException.ThrowIfNegative(percent);
         ArgumentOutOfRangeException.ThrowIfGreaterThan(percent, 100);
-        lock (_gate) _wantedBrightness = percent;
+        lock (_gate) {
+            _wantedBrightness = percent;
+            _wantedVersion++;
+        }
         _wake.Set();
     }
 
     /// Frames keep being accepted while off; the screen keeps its image and gets the changes just before lighting up.
     public void SetPower(bool on) {
-        lock (_gate) _wantedOn = on;
+        lock (_gate) {
+            _wantedOn = on;
+            _wantedVersion++;
+        }
         _wake.Set();
+    }
+
+    /// Waits until the screen got the latest power and brightness, e.g. before the PC sleeps or the app exits.
+    /// True right away when no screen is connected: there is nothing to wait for.
+    public bool WaitSettled(TimeSpan timeout) {
+        long target;
+        lock (_gate) target = _wantedVersion;
+        var stopwatch = Stopwatch.StartNew();
+        while (Volatile.Read(ref _appliedVersion) < target) {
+            if (_state == ConnectionState.Disconnected) return true;
+            if (stopwatch.Elapsed >= timeout) return false;
+            Thread.Sleep(10);
+        }
+        return true;
     }
 
     /// After the PC resumes: the port handle may be stale.
@@ -138,7 +165,7 @@ internal sealed class DisplayWorker : IDisposable {
             }
 
             try {
-                Apply(_display);
+                Volatile.Write(ref _appliedVersion, Apply(_display));
             } catch (Exception e) when (IsConnectionError(e)) {
                 Log.Warn($"Display error: {e.Message}");
                 Disconnect();
@@ -152,11 +179,13 @@ internal sealed class DisplayWorker : IDisposable {
         _statistics.Log();
     }
 
-    /// Brings the screen to the wanted state.
-    private void Apply(RevADisplay display) {
+    /// Brings the screen to the wanted state; returns the version of the power and brightness it applied.
+    private long Apply(RevADisplay display) {
         bool on;
         int brightness;
+        long version;
         lock (_gate) {
+            version = _wantedVersion;
             on = _wantedOn;
             brightness = _wantedBrightness;
             if (_hasPending) {
@@ -169,13 +198,14 @@ internal sealed class DisplayWorker : IDisposable {
         if (!on) {
             if (_sentOn != false) display.ScreenOff();
             _sentOn = false;
-            return;
+            return version;
         }
 
         // Lighting up: draw while still dark, so the screen shows the current image at once instead of catching up in
         // sight. After connecting, the screen state is unknown (white after plugging in): hide the whole redraw.
         if (_sentOn != true) {
-            if (!_hasLatest) return;
+            // Lit up with the first frame
+            if (!_hasLatest) return version;
             if (_sentOn == null) display.ScreenOff();
             _sentOn = false;
             SendFrame(display);
@@ -189,6 +219,7 @@ internal sealed class DisplayWorker : IDisposable {
             display.SetBrightness(brightness);
             _sentBrightness = brightness;
         }
+        return version;
     }
 
     private void SendFrame(RevADisplay display) {
@@ -239,6 +270,7 @@ internal sealed class DisplayWorker : IDisposable {
         _sentOn = null;
         _sentBrightness = null;
         _lastProblem = null;
+        _portName = port;
         Log.Info($"Screen connected on {port}");
         // Connected once the first full frame is shown
         SetState(ConnectionState.Connecting);
@@ -250,6 +282,7 @@ internal sealed class DisplayWorker : IDisposable {
 
         _display.Dispose();
         _display = null;
+        _portName = null;
         _shownKnown = false;
         _sentOn = null;
         _sentBrightness = null;

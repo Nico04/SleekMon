@@ -210,14 +210,14 @@ internal static class DiagnosticCommands {
         return 0;
     }
 
-    /// --run [--duration MIN]: real sensors on the screen, motherboard sensors from AppConfig. Run as administrator for
+    /// --run [--duration MIN]: real sensors on the screen, motherboard sensors from the config file. Run as administrator for
     /// every sensor. The displayed values go to the log every 10 s, to compare with other tools.
     public static int Run(CommandArgs args) {
         var settings = ReadDisplaySettings(args, landscapeOnly: true);
         var duration = TimeSpan.FromMinutes(args.Int("duration", 10, 1, 24 * 60));
         args.RejectUnknown();
 
-        var config = AppConfig.Load();
+        var config = new ConfigFile().Load();
         Log.Info($"Run: {duration.TotalMinutes} min, {config.Sensors}, {settings.Describe()}");
         using var sensors = new LhmSensorProvider(config.Sensors);
         sensors.Start();
