@@ -33,4 +33,11 @@
         <None Update="assets\**\*" CopyToOutputDirectory="PreserveNewest" />
     </ItemGroup>
 
+    <!-- Native debug symbols shipped in packages (libSkiaSharp.pdb alone is ~90 MB): not needed to run -->
+    <Target Name="ExcludeNativeSymbols" AfterTargets="ResolvePackageAssets">
+        <ItemGroup>
+            <NativeCopyLocalItems Remove="@(NativeCopyLocalItems)" Condition="'%(Extension)' == '.pdb'" />
+        </ItemGroup>
+    </Target>
+
 </Project>
