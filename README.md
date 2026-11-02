@@ -8,7 +8,7 @@ Affiche CPU, GPU, RAM et boîtier avec des couleurs d'état, et éteint l'écran
 ## Fonctionnalités
 
 - Tableau de bord 480×320 paysage, dessiné avec **SkiaSharp**.
-- Métriques : CPU % et °C, GPU % et °C, VRAM, RAM, température et ventilateur du boîtier, ventilateurs CPU/GPU, heure. Plus tard : FPS (en jeu) et processus le plus actif.
+- Métriques : CPU % et °C, GPU % et °C, VRAM, RAM, température et ventilateur du boîtier, ventilateurs CPU/GPU, heure, processus le plus actif (CPU % et mémoire, regroupé par nom comme dans le Gestionnaire des tâches). Plus tard : FPS (en jeu).
 - Couleurs d'état : gris (repos), blanc (normal), orange (élevé), rouge (critique). Ventilateur à l'arrêt (0 RPM) en vert.
 - **Veille automatique** : écran éteint quand CPU < 10 %, GPU < 5 % et RAM < 90 % pendant 30 s ; rallumé quand l'un d'eux dépasse son seuil pendant 2 s. Écran éteint aussi pendant la veille du PC et à la fermeture de session.
 - Envoi **uniquement des zones modifiées** vers l'écran (~20 Ko par seconde au lieu de 300 Ko) : c'est le transfert USB qui coûte (~170 Ko/s), pas le dessin.
@@ -69,6 +69,7 @@ Le menu de l'icône enregistre lui-même `enabled`, `powerSaving` et `brightness
 | `enabled` | Désactivé : écran éteint, port libéré, capteurs arrêtés. |
 | `powerSaving` | Veille automatique (règle dans `idle`). |
 | `brightness`, `brightnessLevels` | Luminosité (%) et paliers proposés dans le menu. |
+| `topProcessMinCpu` | En dessous de ce % CPU, la carte du processus le plus actif affiche `--`. |
 | `idle` | Seuils de la veille : `cpuBelow`, `gpuBelow` (%), `ramAbove` (% qui garde l'écran allumé), `delaySeconds`, `wakeAfterSeconds`. |
 | `sensors` | Capteurs de la carte mère, par leur nom : `cpuFan`, `caseFan`, `caseTemperature`. Les noms (`Fan #2`, `Temperature #2`…) dépendent de chaque carte : les trouver avec `--dump-sensors` et un outil comme HWMonitor. `null` : affiché `--`. |
 | `port` | Port COM forcé ; `null` : détecté automatiquement. |

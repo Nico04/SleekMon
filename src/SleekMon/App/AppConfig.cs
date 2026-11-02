@@ -27,6 +27,8 @@ internal sealed record AppConfig {
     /// % choices of the tray menu.
     public int[] BrightnessLevels { get; init; } = DefaultBrightnessLevels;
     public IdleConfig Idle { get; init; } = new();
+    /// %: when the busiest program uses less CPU, the card shows "--".
+    public int TopProcessMinCpu { get; init; } = 2;
     /// Motherboard sensors: their names depend on the board (see --dump-sensors), so none by default.
     public SensorSelection Sensors { get; init; } = new();
     /// Forced COM port; null: found from the registry.
@@ -40,6 +42,7 @@ internal sealed record AppConfig {
         return this with {
             Brightness = Math.Clamp(Brightness, 0, 100),
             BrightnessLevels = levels.Length > 0 ? levels : DefaultBrightnessLevels,
+            TopProcessMinCpu = Math.Clamp(TopProcessMinCpu, 0, 100),
             Idle = idle with {
                 CpuBelow = Math.Clamp(idle.CpuBelow, 0, 100),
                 GpuBelow = Math.Clamp(idle.GpuBelow, 0, 100),

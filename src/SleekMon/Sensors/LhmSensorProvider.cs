@@ -8,17 +8,21 @@ namespace SleekMon.Sensors;
 /// Sensors read through LibreHardwareMonitor, which is not thread-safe: one Computer, owned by a dedicated thread that
 /// updates every sensor once per second (at half seconds, so a render on the whole second gets fresh values).
 /// Only reads: fans are read as Fan (RPM), never through their Control interface.
+/// The busiest program is sampled on the same thread, every other second.
 internal sealed class LhmSensorProvider : ISensorProvider {
     private static readonly TimeSpan ResolveRetryPeriod = TimeSpan.FromMinutes(1);
     private static readonly TimeSpan StatisticsPeriod = TimeSpan.FromMinutes(1);
 
     private readonly SensorSelection _selection;
+    private readonly double _topProcessMinCpu;
     private readonly Thread _thread;
     private readonly ManualResetEventSlim _stop = new();
     private volatile SensorSnapshot _latest = new() { Timestamp = DateTime.Now };
 
-    public LhmSensorProvider(SensorSelection selection) {
+    /// topProcessMinCpu: below this CPU %, no busiest program is shown.
+    public LhmSensorProvider(SensorSelection selection, double topProcessMinCpu) {
         _selection = selection;
+        _topProcessMinCpu = topProcessMinCpu;
         _thread = new Thread(Run) { IsBackground = true, Name = "Sensors" };
     }
 
@@ -43,6 +47,8 @@ internal sealed class LhmSensorProvider : ISensorProvider {
             IsMotherboardEnabled = true,
             IsControllerEnabled = true
         };
+        using var topProcessSampler = new TopProcessSampler(_topProcessMinCpu);
+        TopProcess? topProcess = null;
         try {
             var stopwatch = Stopwatch.StartNew();
             computer.Open();
@@ -54,6 +60,7 @@ internal sealed class LhmSensorProvider : ISensorProvider {
             var durations = new List<double>();
             var sinceStatistics = Stopwatch.StartNew();
             string? lastError = null;
+            var cycle = 0;
 
             while (!_stop.Wait(DelayToNextHalfSecond())) {
                 try {
@@ -63,7 +70,12 @@ internal sealed class LhmSensorProvider : ISensorProvider {
                         bindings = Bindings.Resolve(computer, _selection, log: false);
                         sinceResolve.Restart();
                     }
-                    _latest = bindings.Read(limited);
+                    if (cycle++ % 2 == 0) topProcess = topProcessSampler.Sample();
+                    _latest = bindings.Read(limited) with {
+                        TopProcessName = topProcess?.Name,
+                        TopProcessCpu = topProcess?.CpuPercent,
+                        TopProcessMemGb = topProcess?.MemoryGb
+                    };
                     durations.Add(stopwatch.Elapsed.TotalMilliseconds);
                     lastError = null;
                 } catch (Exception e) {

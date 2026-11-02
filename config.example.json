@@ -3,6 +3,7 @@
   "powerSaving": true,
   "brightness": 60,
   "brightnessLevels": [10, 30, 60, 100],
+  "topProcessMinCpu": 2,
   "idle": {
     "cpuBelow": 10,
     "gpuBelow": 5,

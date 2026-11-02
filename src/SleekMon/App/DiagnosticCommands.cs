@@ -219,7 +219,7 @@ internal static class DiagnosticCommands {
 
         var config = new ConfigFile().Load();
         Log.Info($"Run: {duration.TotalMinutes} min, {config.Sensors}, {settings.Describe()}");
-        using var sensors = new LhmSensorProvider(config.Sensors);
+        using var sensors = new LhmSensorProvider(config.Sensors, config.TopProcessMinCpu);
         sensors.Start();
         RunLoop(settings, duration, 16, 16, (tick, _) => {
             // The clock shows the render time, not the reading time
@@ -272,7 +272,9 @@ internal static class DiagnosticCommands {
             $"GPU {Value(snapshot.GpuLoad)}% {Value(snapshot.GpuTemp)}° {Value(snapshot.GpuFanRpm)} RPM · " +
             $"VRAM {Value(snapshot.VramLoad)}% {Value(snapshot.VramUsedGb)}{Render.Formatter.OfTotal(snapshot.VramTotalGb)} · " +
             $"RAM {Value(snapshot.RamLoad)}% {Value(snapshot.RamUsedGb)}{Render.Formatter.OfTotal(snapshot.RamTotalGb)} · " +
-            $"case {Value(snapshot.CaseTemp)}° {Value(snapshot.CaseFanRpm)} RPM · limited {snapshot.SensorsLimited}";
+            $"case {Value(snapshot.CaseTemp)}° {Value(snapshot.CaseFanRpm)} RPM · " +
+            $"top {snapshot.TopProcessName ?? "--"} {Value(snapshot.TopProcessCpu)}% {Render.Formatter.Gigabytes(snapshot.TopProcessMemGb)} GB · " +
+            $"limited {snapshot.SensorsLimited}";
     }
 
     /// --bench-diff [--frames N]: without the screen, what the tile diff would send on simulated frames, per tile size.

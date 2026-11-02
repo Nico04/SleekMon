@@ -41,6 +41,18 @@ internal static class SensorBenchmark {
             }
             Log.Info(string.Create(CultureInfo.InvariantCulture,
                 $"  {wall.Sum() / cycles,7:F1} ms elapsed, {cpu.Sum() / cycles,6:F1} ms CPU  total"));
+
+            // The busiest program, sampled every other second by the app
+            using var sampler = new TopProcessSampler(0);
+            sampler.Sample();
+            process.Refresh();
+            var samplerCpuBefore = process.TotalProcessorTime;
+            var stopwatch2 = Stopwatch.StartNew();
+            TopProcess? top = null;
+            for (var cycle = 0; cycle < cycles; cycle++) top = sampler.Sample();
+            process.Refresh();
+            Log.Info(string.Create(CultureInfo.InvariantCulture,
+                $"  {stopwatch2.Elapsed.TotalMilliseconds / cycles,7:F1} ms elapsed, {(process.TotalProcessorTime - samplerCpuBefore).TotalMilliseconds / cycles,6:F1} ms CPU  busiest program ({top?.Name})"));
         } finally {
             computer.Close();
         }
