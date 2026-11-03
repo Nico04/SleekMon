@@ -49,7 +49,7 @@ internal static class DiagnosticCommands {
         return 0;
     }
 
-    /// --show PNG [--repeat N]: a 480×320 image, e.g. the v3 mockups.
+    /// --show PNG [--repeat N]: a 480×320 image, e.g. the mockups in docs/mockups.
     public static int Show(CommandArgs args) {
         var path = args.Positional(0) ?? throw new UsageException("--show needs a PNG path");
         var settings = ReadDisplaySettings(args, landscapeOnly: true);
@@ -149,7 +149,7 @@ internal static class DiagnosticCommands {
     }
 
     /// --render SCENARIO|all OUTPUT [--compare MOCKUPS_DIR]: OUTPUT is a PNG file, or a folder for "all".
-    /// --compare also writes NAME-compare.png (mockup v3-NAME.png | render | amplified difference) next to each render.
+    /// --compare also writes NAME-compare.png (mockup NAME.png | render | amplified difference) next to each render.
     public static int RenderScenarios(CommandArgs args) {
         var names = string.Join(", ", FakeScenarios.All.Select(scenario => scenario.Name));
         var requested = args.Positional(0) ?? throw new UsageException($"--render needs a scenario ({names}) or all");
@@ -171,7 +171,7 @@ internal static class DiagnosticCommands {
             Log.Info(string.Create(CultureInfo.InvariantCulture, $"Rendered {name} in {elapsed:F1} ms: {path}"));
 
             if (mockups == null) continue;
-            var mockupPath = Path.Combine(Path.GetFullPath(mockups), $"v3-{name}.png");
+            var mockupPath = Path.Combine(Path.GetFullPath(mockups), $"{name}.png");
             using var mockup = SKBitmap.Decode(mockupPath);
             if (mockup == null) {
                 Log.Error($"Cannot decode {mockupPath}");

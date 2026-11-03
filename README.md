@@ -3,7 +3,7 @@
 Moniteur matériel pour le petit écran USB-C **Turing Smart Screen 3.5"** (révision A), sous Windows.
 Affiche CPU, GPU, RAM et boîtier avec des couleurs d'état, et éteint l'écran quand le PC est au repos.
 
-![Maquette v3 — en jeu](.github/images/dashboard.png)
+![Maquette v3 — en jeu](docs/mockups/gaming.png)
 
 ## Fonctionnalités
 
@@ -90,21 +90,6 @@ SleekMon.exe --run-fake                       # boucle réelle sur valeurs simul
 SleekMon.exe --run                            # boucle réelle avec les vrais capteurs, sans l'icône
 SleekMon.exe --dump-sensors sensors.txt       # tous les capteurs (lancer en administrateur)
 SleekMon.exe --bench-sensors                  # coût de lecture de chaque matériel
-```
-
-## Structure
-
-```
-SleekMon/
-├─ SleekMon.slnx
-├─ config.example.json
-├─ src/SleekMon/
-│  ├─ Display/            pilote révision A maison (détection du port, commandes, envoi des zones modifiées)
-│  ├─ Sensors/            ISensorProvider + implémentation LibreHardwareMonitor
-│  ├─ Render/             dessin SkiaSharp à partir d'un SensorSnapshot (aucune dépendance matérielle)
-│  ├─ App/                tableau de bord, veille, config, icône de la barre des tâches, commandes
-│  └─ assets/fonts/       Saira Semi Condensed (TTF, licence OFL)
-└─ .github/images/        images du README
 ```
 
 ## Crédits et licences
