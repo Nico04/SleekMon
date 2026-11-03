@@ -78,6 +78,13 @@ internal sealed class Dashboard : IDisposable {
         }
     }
 
+    /// Acts like an automatic wake: the screen lights up and sleeps again after the usual quiet delay.
+    public void Wake() {
+        Running? running;
+        lock (_gate) running = _running;
+        running?.Wake();
+    }
+
     /// The PC is going to sleep: the screen is turned off before returning (bounded wait).
     public void Suspend() {
         Running? running;
@@ -142,6 +149,7 @@ internal sealed class Dashboard : IDisposable {
         private readonly Thread _thread;
         private readonly ManualResetEventSlim _stop = new();
         private volatile bool _sleeping;
+        private int _wakeRequested;
 
         public Running(Dashboard owner, AppConfig config) {
             _owner = owner;
@@ -161,6 +169,13 @@ internal sealed class Dashboard : IDisposable {
 
         /// Idle with power saving on.
         public bool Sleeping => _sleeping;
+
+        /// Raised on any thread; the idle detector is reset by the loop, its only owner.
+        public void Wake() {
+            Interlocked.Exchange(ref _wakeRequested, 1);
+            // Without waiting for the next tick
+            Worker.SetPower(true);
+        }
 
         public void TurnOff() {
             Worker.SetPower(false);
@@ -193,7 +208,8 @@ internal sealed class Dashboard : IDisposable {
                 var (powerSaving, suspended) = _owner.ReadSettings();
                 // The clock shows the render time, not the reading time
                 var snapshot = _sensors.Latest with { Timestamp = DateTime.Now };
-                if (!powerSaving) _idle.Reset();
+                var wakeRequested = Interlocked.Exchange(ref _wakeRequested, 0) == 1;
+                if (!powerSaving || wakeRequested) _idle.Reset();
                 _sleeping = powerSaving && _idle.Update(snapshot, now);
 
                 // Rendered even when off: the screen lights up on a current image

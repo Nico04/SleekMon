@@ -1,5 +1,6 @@
 using System.ComponentModel;
 using System.Diagnostics;
+using System.Drawing;
 using System.Windows.Forms;
 using Microsoft.Win32;
 using SleekMon.Sensors;
@@ -16,6 +17,7 @@ internal sealed class TrayApp : ApplicationContext {
     private readonly ToolStripMenuItem _status = new() { Enabled = false };
     private readonly ToolStripMenuItem _enabled;
     private readonly ToolStripMenuItem _powerSaving;
+    private readonly ToolStripMenuItem _wake;
     private readonly ToolStripMenuItem _brightness = new("Brightness");
     private readonly Dashboard _dashboard;
     private AppConfig _config;
@@ -26,6 +28,8 @@ internal sealed class TrayApp : ApplicationContext {
 
         _enabled = new ToolStripMenuItem("Enabled", null, OnEnabledClick) { Checked = _config.Enabled };
         _powerSaving = new ToolStripMenuItem("Power saving", null, OnPowerSavingClick) { Checked = _config.PowerSaving };
+        _wake = new ToolStripMenuItem("Wake screen", null, (_, _) => Wake());
+        UpdateWakeItem();
         foreach (var level in _config.BrightnessLevels) {
             _brightness.DropDownItems.Add(new ToolStripMenuItem($"{level}%", null, (_, _) => OnBrightnessClick(level)) {
                 Checked = level == _config.Brightness
@@ -35,6 +39,7 @@ internal sealed class TrayApp : ApplicationContext {
         var menu = new ContextMenuStrip();
         menu.Items.Add(_status);
         menu.Items.Add(new ToolStripSeparator());
+        menu.Items.Add(_wake);
         menu.Items.Add(_enabled);
         menu.Items.Add(_powerSaving);
         menu.Items.Add(_brightness);
@@ -43,7 +48,12 @@ internal sealed class TrayApp : ApplicationContext {
         }
         menu.Items.Add(new ToolStripSeparator());
         menu.Items.Add(new ToolStripMenuItem("Exit", null, (_, _) => Exit()));
+        // Bold: the default action, the one of a left click on the icon
+        _wake.Font = new Font(menu.Font, FontStyle.Bold);
         _notifyIcon = new NotifyIcon { ContextMenuStrip = menu };
+        _notifyIcon.MouseClick += (_, e) => {
+            if (e.Button == MouseButtons.Left) Wake();
+        };
 
         _dashboard = new Dashboard(_config);
         _dashboard.StateChanged += _ => _ui.Post(_ => ShowState(), null);
@@ -74,6 +84,7 @@ internal sealed class TrayApp : ApplicationContext {
         var enabled = !_enabled.Checked;
         _enabled.Checked = enabled;
         Save(_config with { Enabled = enabled });
+        UpdateWakeItem();
         // Disabling waits for the screen to turn off (a second or two)
         _dashboard.SetEnabled(enabled);
     }
@@ -82,7 +93,15 @@ internal sealed class TrayApp : ApplicationContext {
         var powerSaving = !_powerSaving.Checked;
         _powerSaving.Checked = powerSaving;
         Save(_config with { PowerSaving = powerSaving });
+        UpdateWakeItem();
         _dashboard.SetPowerSaving(powerSaving);
+    }
+
+    /// Waking only means something when the screen can sleep.
+    private void UpdateWakeItem() => _wake.Enabled = _config.Enabled && _config.PowerSaving;
+
+    private void Wake() {
+        if (_wake.Enabled) _dashboard.Wake();
     }
 
     private void OnBrightnessClick(int level) {
