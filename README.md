@@ -109,6 +109,8 @@ SleekMon/
 
 ## Crédits et licences
 
+SleekMon est distribué sous licence BSD 3-Clause (voir [LICENSE](LICENSE)).
+
 - Protocole de l'écran : documenté par [turing-smart-screen-python](https://github.com/mathoudebine/turing-smart-screen-python) (GPL-3.0). **Aucun code n'en est recopié** : le pilote est réécrit à partir des faits du protocole.
 - [usausa/turing-smart-screen](https://github.com/usausa/turing-smart-screen) (MIT) : référence C# pour l'encodage des commandes.
 - [LibreHardwareMonitor](https://github.com/LibreHardwareMonitor/LibreHardwareMonitor) (MPL-2.0) : capteurs, via le paquet NuGet `LibreHardwareMonitorLib`.
