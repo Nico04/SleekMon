@@ -219,7 +219,7 @@ internal static class DiagnosticCommands {
 
         var config = new ConfigFile().Load();
         Log.Info($"Run: {duration.TotalMinutes} min, {config.Sensors}, {settings.Describe()}");
-        using var sensors = new LhmSensorProvider(config.Sensors, config.TopProcessMinCpu);
+        using var sensors = new LhmSensorProvider(config.Sensors, config.TopProcessMinCpu, config.Fps);
         sensors.Start();
         RunLoop(settings, duration, 16, 16, (tick, _) => {
             // The clock shows the render time, not the reading time
@@ -274,6 +274,7 @@ internal static class DiagnosticCommands {
             $"RAM {Value(snapshot.RamLoad)}% {Value(snapshot.RamUsedGb)}{Render.Formatter.OfTotal(snapshot.RamTotalGb)} · " +
             $"case {Value(snapshot.CaseTemp)}° {Value(snapshot.CaseFanRpm)} RPM · " +
             $"top {snapshot.TopProcessName ?? "--"} {Value(snapshot.TopProcessCpu)}% {Render.Formatter.Gigabytes(snapshot.TopProcessMemGb)} GB · " +
+            $"FPS {Value(snapshot.Fps)} · " +
             $"limited {snapshot.SensorsLimited}";
     }
 

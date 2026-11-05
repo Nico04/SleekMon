@@ -8,7 +8,8 @@ Affiche CPU, GPU, RAM et boîtier avec des couleurs d'état, et éteint l'écran
 ## Fonctionnalités
 
 - Tableau de bord 480×320 paysage, dessiné avec **SkiaSharp**.
-- Métriques : CPU % et °C, GPU % et °C, VRAM, RAM, température et ventilateur du boîtier, ventilateurs CPU/GPU, heure, processus le plus actif (CPU % et mémoire, regroupé par nom comme dans le Gestionnaire des tâches). Plus tard : FPS (en jeu).
+- Métriques : CPU % et °C, GPU % et °C, VRAM, RAM, température et ventilateur du boîtier, ventilateurs CPU/GPU, heure, processus le plus actif (CPU % et mémoire, regroupé par nom comme dans le Gestionnaire des tâches), FPS de l'appli au premier plan.
+- **FPS** : mesurés comme PresentMon (événements graphiques du noyau Windows, rien n'est injecté dans le jeu), pour toutes les API (DirectX, Vulkan, OpenGL) et tous les GPU, en plein écran comme en fenêtré. Affichés toujours pour les jeux reconnus par Windows (liste de la Barre de jeu), même s'ils rament ; pour une autre appli, dès qu'elle affiche au moins 20 images/s pendant 3 s (réglable, voir `fps`). Nécessitent les droits administrateur.
 - Couleurs d'état : gris (repos), blanc (normal), orange (élevé), rouge (critique). Ventilateur à l'arrêt (0 RPM) en vert.
 - **Veille automatique** : écran éteint quand CPU < 10 %, GPU < 5 % et RAM < 90 % pendant 30 s ; rallumé quand l'un d'eux dépasse son seuil pendant 2 s. Écran éteint aussi pendant la veille du PC et à la fermeture de session.
 - Envoi **uniquement des zones modifiées** vers l'écran (~20 Ko par seconde au lieu de 300 Ko) : c'est le transfert USB qui coûte (~170 Ko/s), pas le dessin.
@@ -27,7 +28,7 @@ Affiche CPU, GPU, RAM et boîtier avec des couleurs d'état, et éteint l'écran
 - **.NET 10** (SDK pour compiler, Desktop Runtime pour exécuter), x64.
 - **PawnIO** installé : pilote noyau utilisé par LibreHardwareMonitor ≥ 0.9.6 pour la température CPU AMD et les capteurs de la carte mère. Sans lui, ces valeurs s'affichent `--`.
   LibreHardwareMonitor ne l'installe pas tout seul (l'appli LibreHardwareMonitor propose de l'installer, version ≥ 2.0).
-- **Droits administrateur** (recommandés, pas obligatoires) pour la température du CPU et les capteurs de la carte mère. **L'appli fonctionne aussi sans** : l'écran s'affiche normalement avec CPU %, GPU (charge, température, VRAM, ventilateur), RAM, heure et processus le plus actif ; seuls la température du CPU et les capteurs de la carte mère (ventilateurs CPU et boîtier, température du boîtier) affichent `--`, avec la mention « Limited sensors · run as admin » dans la ligne de statut. La tâche planifiée ci-dessous lui donne les droits ; sinon, « Restart as administrator » dans le menu de l'icône.
+- **Droits administrateur** (recommandés, pas obligatoires) pour la température du CPU, les capteurs de la carte mère et les FPS. **L'appli fonctionne aussi sans** : l'écran s'affiche normalement avec CPU %, GPU (charge, température, VRAM, ventilateur), RAM, heure et processus le plus actif ; seuls la température du CPU et les capteurs de la carte mère (ventilateurs CPU et boîtier, température du boîtier) affichent `--` et les FPS ne s'affichent pas, avec la mention « Limited sensors · run as admin » dans la ligne de statut. La tâche planifiée ci-dessous lui donne les droits ; sinon, « Restart as administrator » dans le menu de l'icône.
 - Fermer toute autre appli qui utilise l'écran (Rizplay, USBMonitor.exe, turing-smart-screen-python…) : le port COM est exclusif.
 
 ## Installation
@@ -96,6 +97,7 @@ Le menu de l'icône enregistre lui-même `enabled`, `powerSaving` et `brightness
 | `powerSaving` | Veille automatique (règle dans `idle`). |
 | `brightness`, `brightnessLevels` | Luminosité (%) et paliers proposés dans le menu. |
 | `topProcessMinCpu` | En dessous de ce % CPU, la carte du processus le plus actif affiche `--`. |
+| `fps` | Pastille FPS de l'appli au premier plan. Toujours affichée pour les jeux reconnus par Windows et les exe de `always` (`["GravityMark.exe"]`), jamais pour ceux de `never` (`["firefox.exe"]`). Pour une autre appli : affichée après `minSeconds` s d'affilée à au moins `minFps` images/s, masquée après autant de secondes en dessous. |
 | `idle` | Seuils de la veille : `cpuBelow`, `gpuBelow` (%), `ramAbove` (% qui garde l'écran allumé), `delaySeconds`, `wakeAfterSeconds`. |
 | `sensors` | Capteurs de la carte mère, par leur nom : `cpuFan`, `caseFan`, `caseTemperature`. Les noms (`Fan #2`, `Temperature #2`…) dépendent de chaque carte : les trouver avec `--dump-sensors` et un outil comme HWMonitor. `null` : affiché `--`. |
 | `port` | Port COM forcé ; `null` : détecté automatiquement. |

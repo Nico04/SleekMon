@@ -4,6 +4,12 @@
   "brightness": 60,
   "brightnessLevels": [10, 30, 60, 100],
   "topProcessMinCpu": 2,
+  "fps": {
+    "minFps": 20,
+    "minSeconds": 3,
+    "always": [],
+    "never": []
+  },
   "idle": {
     "cpuBelow": 10,
     "gpuBelow": 5,

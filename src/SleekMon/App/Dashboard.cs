@@ -154,7 +154,7 @@ internal sealed class Dashboard : IDisposable {
         public Running(Dashboard owner, AppConfig config) {
             _owner = owner;
             _idle = new IdleDetector(config.Idle);
-            _sensors = new LhmSensorProvider(config.Sensors, config.TopProcessMinCpu);
+            _sensors = new LhmSensorProvider(config.Sensors, config.TopProcessMinCpu, config.Fps);
             Worker = new DisplayWorker(new DisplayWorkerOptions { ForcedPort = config.Port });
             Worker.SetBrightness(config.Brightness);
             Worker.StateChanged += _ => _owner.RefreshState();

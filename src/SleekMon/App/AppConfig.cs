@@ -29,6 +29,7 @@ internal sealed record AppConfig {
     public IdleConfig Idle { get; init; } = new();
     /// %: when the busiest program uses less CPU, the card shows "--".
     public int TopProcessMinCpu { get; init; } = 2;
+    public FpsSettings Fps { get; init; } = new();
     /// Motherboard sensors: their names depend on the board (see --dump-sensors), so none by default.
     public SensorSelection Sensors { get; init; } = new();
     /// Forced COM port; null: found from the registry.
@@ -38,6 +39,7 @@ internal sealed record AppConfig {
     public AppConfig Normalized() {
         // JSON null for an object or array
         var idle = Idle ?? new IdleConfig();
+        var fps = Fps ?? new FpsSettings();
         var levels = (BrightnessLevels ?? []).Where(level => level is >= 0 and <= 100).Distinct().Order().ToArray();
         return this with {
             Brightness = Math.Clamp(Brightness, 0, 100),
@@ -50,7 +52,18 @@ internal sealed record AppConfig {
                 DelaySeconds = Math.Max(1, idle.DelaySeconds),
                 WakeAfterSeconds = Math.Max(0, idle.WakeAfterSeconds)
             },
+            Fps = fps with {
+                MinFps = Math.Max(0, fps.MinFps),
+                // At least one second: the rule needs a reading to change its mind
+                MinSeconds = Math.Max(1, fps.MinSeconds),
+                Always = Names(fps.Always),
+                Never = Names(fps.Never)
+            },
             Sensors = Sensors ?? new SensorSelection()
         };
     }
+
+    // JSON null for the array or for an entry
+    private static string[] Names(string?[]? names) =>
+        (names ?? []).OfType<string>().Select(name => name.Trim()).Where(name => name.Length > 0).ToArray();
 }

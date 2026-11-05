@@ -25,6 +25,7 @@
 
     <ItemGroup>
         <PackageReference Include="LibreHardwareMonitorLib" Version="0.9.6" />
+        <PackageReference Include="Microsoft.Diagnostics.Tracing.TraceEvent" Version="4.0.0" />
         <PackageReference Include="SkiaSharp" Version="4.153.1" />
         <PackageReference Include="System.IO.Ports" Version="10.0.13" />
     </ItemGroup>
@@ -37,6 +38,14 @@
     <Target Name="ExcludeNativeSymbols" AfterTargets="ResolvePackageAssets">
         <ItemGroup>
             <NativeCopyLocalItems Remove="@(NativeCopyLocalItems)" Condition="'%(Extension)' == '.pdb'" />
+        </ItemGroup>
+    </Target>
+
+    <!-- TraceEvent copies its symbol reader (msdia140) and kernel trace merger (KernelTraceControl, ~2.5 MB together):
+         the real-time FPS session uses neither (checked without them, RESEARCH § 5) -->
+    <Target Name="ExcludeTraceEventNatives" BeforeTargets="AssignTargetPaths">
+        <ItemGroup>
+            <None Remove="@(None)" Condition="'%(Filename)' == 'msdia140' Or '%(Filename)' == 'KernelTraceControl'" />
         </ItemGroup>
     </Target>
 

@@ -8,21 +8,23 @@ namespace SleekMon.Sensors;
 /// Sensors read through LibreHardwareMonitor, which is not thread-safe: one Computer, owned by a dedicated thread that
 /// updates every sensor once per second (at half seconds, so a render on the whole second gets fresh values).
 /// Only reads: fans are read as Fan (RPM), never through their Control interface.
-/// The busiest program is sampled on the same thread, every other second.
+/// The busiest program is sampled on the same thread, every other second, and the FPS of the foreground program every second.
 internal sealed class LhmSensorProvider : ISensorProvider {
     private static readonly TimeSpan ResolveRetryPeriod = TimeSpan.FromMinutes(1);
     private static readonly TimeSpan StatisticsPeriod = TimeSpan.FromMinutes(1);
 
     private readonly SensorSelection _selection;
     private readonly double _topProcessMinCpu;
+    private readonly FpsSettings _fps;
     private readonly Thread _thread;
     private readonly ManualResetEventSlim _stop = new();
     private volatile SensorSnapshot _latest = new() { Timestamp = DateTime.Now };
 
     /// topProcessMinCpu: below this CPU %, no busiest program is shown.
-    public LhmSensorProvider(SensorSelection selection, double topProcessMinCpu) {
+    public LhmSensorProvider(SensorSelection selection, double topProcessMinCpu, FpsSettings fps) {
         _selection = selection;
         _topProcessMinCpu = topProcessMinCpu;
+        _fps = fps;
         _thread = new Thread(Run) { IsBackground = true, Name = "Sensors" };
     }
 
@@ -48,6 +50,7 @@ internal sealed class LhmSensorProvider : ISensorProvider {
             IsControllerEnabled = true
         };
         using var topProcessSampler = new TopProcessSampler(_topProcessMinCpu);
+        using var fpsMonitor = new FpsMonitor(_fps);
         TopProcess? topProcess = null;
         try {
             var stopwatch = Stopwatch.StartNew();
@@ -74,7 +77,8 @@ internal sealed class LhmSensorProvider : ISensorProvider {
                     _latest = bindings.Read(limited) with {
                         TopProcessName = topProcess?.Name,
                         TopProcessCpu = topProcess?.CpuPercent,
-                        TopProcessMemGb = topProcess?.MemoryGb
+                        TopProcessMemGb = topProcess?.MemoryGb,
+                        Fps = fpsMonitor.Sample()
                     };
                     durations.Add(stopwatch.Elapsed.TotalMilliseconds);
                     lastError = null;
