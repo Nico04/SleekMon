@@ -1,0 +1,95 @@
+name: Release
+
+# Push a tag starting with "v" to build a draft GitHub release:
+#   git tag v1.0.0 && git push origin v1.0.0
+# A tag with a suffix (v1.0.0-beta.1) makes a prerelease. The release is created as a draft:
+# check the notes and the files, then publish it from the GitHub releases page.
+on:
+  push:
+    tags: ['v*']
+
+permissions:
+  contents: write
+
+jobs:
+  release:
+    runs-on: windows-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          fetch-depth: 0
+
+      - name: Check the tag
+        shell: bash
+        run: |
+          if ! git merge-base --is-ancestor "$GITHUB_SHA" origin/main; then
+            echo "::error::Tag $GITHUB_REF_NAME is not on main, refusing to release it."
+            exit 1
+          fi
+          VERSION="${GITHUB_REF_NAME#v}"
+          if ! [[ "$VERSION" =~ ^[0-9]+\.[0-9]+\.[0-9]+(-[0-9A-Za-z.-]+)?$ ]]; then
+            echo "::error::Tag $GITHUB_REF_NAME is not a version like v1.2.3 or v1.2.3-beta.1."
+            exit 1
+          fi
+          echo "VERSION=$VERSION" >> "$GITHUB_ENV"
+          echo "ZIP=SleekMon-$GITHUB_REF_NAME-win-x64.zip" >> "$GITHUB_ENV"
+
+      - uses: actions/setup-dotnet@v6
+        with:
+          dotnet-version: 10.0.x
+
+      - name: Publish
+        run: dotnet publish src/SleekMon -c Release -p:Version=${{ env.VERSION }} -o out
+
+      - name: Zip
+        shell: pwsh
+        run: Compress-Archive -Path out/* -DestinationPath $env:ZIP
+
+      - name: Checksum
+        shell: bash
+        run: sha256sum "$ZIP" > SHA256SUMS.txt
+
+      - name: Release notes
+        shell: bash
+        run: |
+          # Previous release: the last tag before this one (a stable release skips prerelease tags)
+          if [[ "$GITHUB_REF_NAME" == *-* ]]; then
+            PREVIOUS=$(git describe --tags --abbrev=0 --match 'v*' "$GITHUB_REF_NAME^" 2>/dev/null || true)
+          else
+            PREVIOUS=$(git describe --tags --abbrev=0 --match 'v*' --exclude 'v*-*' "$GITHUB_REF_NAME^" 2>/dev/null || true)
+          fi
+          RANGE="${PREVIOUS:+$PREVIOUS..}$GITHUB_REF_NAME"
+
+          # "feat(tray): wake the screen" becomes "- **tray**: wake the screen"
+          section() {
+            local lines
+            lines=$(git log "$RANGE" --no-merges --pretty='%s' | grep -E "^($2)(\(|!?:)" || true)
+            if [ -n "$lines" ]; then
+              printf '### %s\n\n' "$1"
+              echo "$lines" | sed -E 's/^[a-z]+\(([^)]*)\)!?: /- **\1**: /; s/^[a-z]+!?: /- /'
+              echo
+            fi
+          }
+
+          {
+            section 'Features' 'feat'
+            section 'Fixes' 'fix'
+            section 'Performance' 'perf'
+            section 'Interface' 'ui'
+            if [ -n "$PREVIOUS" ]; then
+              echo "**Full changelog**: $GITHUB_SERVER_URL/$GITHUB_REPOSITORY/compare/$PREVIOUS...$GITHUB_REF_NAME"
+            fi
+          } > release-notes.md
+          cat release-notes.md
+
+      - name: Create the draft release
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          args=(--draft --verify-tag --title "SleekMon $GITHUB_REF_NAME" --notes-file release-notes.md)
+          if [[ "$GITHUB_REF_NAME" == *-* ]]; then
+            args+=(--prerelease)
+          fi
+          gh release create "$GITHUB_REF_NAME" "$ZIP" SHA256SUMS.txt "${args[@]}"

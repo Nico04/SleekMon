@@ -27,18 +27,35 @@ Affiche CPU, GPU, RAM et boîtier avec des couleurs d'état, et éteint l'écran
 - **.NET 10** (SDK pour compiler, Desktop Runtime pour exécuter), x64.
 - **PawnIO** installé : pilote noyau utilisé par LibreHardwareMonitor ≥ 0.9.6 pour la température CPU AMD et les capteurs de la carte mère. Sans lui, ces valeurs s'affichent `--`.
   LibreHardwareMonitor ne l'installe pas tout seul (l'appli LibreHardwareMonitor propose de l'installer, version ≥ 2.0).
-- **Droits administrateur** pour les capteurs ci-dessus. L'appli se lance aussi sans (elle affiche alors « Limited sensors ») ; la tâche planifiée ci-dessous lui donne les droits.
+- **Droits administrateur** (recommandés, pas obligatoires) pour la température du CPU et les capteurs de la carte mère. **L'appli fonctionne aussi sans** : l'écran s'affiche normalement avec CPU %, GPU (charge, température, VRAM, ventilateur), RAM, heure et processus le plus actif ; seuls la température du CPU et les capteurs de la carte mère (ventilateurs CPU et boîtier, température du boîtier) affichent `--`, avec la mention « Limited sensors · run as admin » dans la ligne de statut. La tâche planifiée ci-dessous lui donne les droits ; sinon, « Restart as administrator » dans le menu de l'icône.
 - Fermer toute autre appli qui utilise l'écran (Rizplay, USBMonitor.exe, turing-smart-screen-python…) : le port COM est exclusif.
 
 ## Installation
 
-Dans un **PowerShell administrateur**, depuis la racine du dépôt :
+Dans un **PowerShell administrateur**. Quitter d'abord SleekMon depuis son icône s'il tourne.
+
+**1. Récupérer l'appli**, de l'une des deux façons :
+
+- **Depuis une release** (le .NET 10 Desktop Runtime suffit) : télécharger `SleekMon-vX.Y.Z-win-x64.zip` depuis la [page des releases](https://github.com/Nico04/SleekMon/releases), puis, depuis le dossier du zip :
+
+  ```powershell
+  # Facultatif : comparer avec le contenu de SHA256SUMS.txt (publié avec le zip)
+  Get-FileHash .\SleekMon-vX.Y.Z-win-x64.zip
+
+  # Retirer le marquage « téléchargé depuis Internet », puis extraire
+  Unblock-File .\SleekMon-vX.Y.Z-win-x64.zip
+  Expand-Archive .\SleekMon-vX.Y.Z-win-x64.zip "$env:LOCALAPPDATA\Programs\SleekMon" -Force
+  ```
+
+- **Depuis les sources** (le SDK .NET 10 est nécessaire), à la racine du dépôt :
+
+  ```powershell
+  dotnet publish src/SleekMon -c Release -o "$env:LOCALAPPDATA\Programs\SleekMon"
+  ```
+
+**2. Démarrage automatique** (à l'ouverture de session, avec les droits administrateur, sans limite de durée) :
 
 ```powershell
-# Compiler et installer (quitter d'abord SleekMon depuis son icône s'il tourne)
-dotnet publish src/SleekMon -c Release -o "$env:LOCALAPPDATA\Programs\SleekMon"
-
-# Démarrage à l'ouverture de session, avec les droits administrateur, sans limite de durée
 $exe = "$env:LOCALAPPDATA\Programs\SleekMon\SleekMon.exe"
 Register-ScheduledTask -TaskName SleekMon -Force `
     -Action (New-ScheduledTaskAction -Execute $exe) `
@@ -50,9 +67,18 @@ Register-ScheduledTask -TaskName SleekMon -Force `
 Start-ScheduledTask -TaskName SleekMon
 ```
 
-Mettre à jour : quitter SleekMon, relancer `dotnet publish`, puis `Start-ScheduledTask -TaskName SleekMon`.
+Mettre à jour : quitter SleekMon, refaire l'étape 1 (le nouveau zip ou `dotnet publish` écrase les fichiers, mais ne supprime pas les anciens), puis `Start-ScheduledTask -TaskName SleekMon`.
 
-Désinstaller :
+### Avertissements de Windows et des antivirus
+
+L'exécutable **n'est pas signé** (un certificat de signature de code coûte de l'argent chaque année, ce qui n'est pas justifié pour un petit projet gratuit). Conséquences possibles :
+
+- **SmartScreen** (« Windows a protégé votre ordinateur ») au premier lancement d'un exe téléchargé : cliquer sur « Informations complémentaires », puis « Exécuter quand même ». `Unblock-File` ci-dessus évite normalement ce message.
+- **Un antivirus** peut signaler l'exe, d'autant que l'appli lit les capteurs de la carte mère via un pilote noyau (PawnIO, dont se sert LibreHardwareMonitor). Les alertes de ce genre sont fréquentes pour les outils de ce type, mais le comportement de chaque antivirus n'a pas été vérifié.
+
+Si cela vous gêne, vérifiez l'empreinte du zip avec `SHA256SUMS.txt`, ou compilez vous-même depuis les sources : le code est entièrement dans ce dépôt, et les releases sont produites par [`.github/workflows/release.yml`](.github/workflows/release.yml).
+
+### Désinstaller
 
 ```powershell
 Unregister-ScheduledTask -TaskName SleekMon -Confirm:$false
