@@ -47,6 +47,11 @@ internal sealed class TrayApp : ApplicationContext {
             menu.Items.Add(new ToolStripMenuItem("Restart as administrator", null, OnRestartAsAdministratorClick));
         }
         menu.Items.Add(new ToolStripSeparator());
+        var config = new ToolStripMenuItem("Config");
+        config.DropDownItems.Add(new ToolStripMenuItem("Open config folder", null, OnOpenConfigFolderClick));
+        config.DropDownItems.Add(new ToolStripMenuItem("Open config file", null, OnOpenConfigClick));
+        config.DropDownItems.Add(new ToolStripMenuItem("Restart to apply changes", null, (_, _) => Relaunch(verb: null)));
+        menu.Items.Add(config);
         menu.Items.Add(new ToolStripMenuItem("Exit", null, (_, _) => Exit()));
         // Bold: the default action, the one of a left click on the icon
         _wake.Font = new Font(menu.Font, FontStyle.Bold);
@@ -110,17 +115,43 @@ internal sealed class TrayApp : ApplicationContext {
         _dashboard.SetBrightness(level);
     }
 
-    private void OnRestartAsAdministratorClick(object? sender, EventArgs e) {
+    private void OnRestartAsAdministratorClick(object? sender, EventArgs e) => Relaunch("runas");
+
+    /// Starts a new instance then exits. The new instance waits for this one to exit (single instance lock). Without
+    /// a verb, it has the same rights as this one.
+    private void Relaunch(string? verb) {
         var path = Environment.ProcessPath ?? Application.ExecutablePath;
         try {
-            // The new instance waits for this one to exit (single instance lock)
-            Process.Start(new ProcessStartInfo(path) { UseShellExecute = true, Verb = "runas" });
+            Process.Start(new ProcessStartInfo(path) { UseShellExecute = true, Verb = verb ?? "" });
         } catch (Win32Exception exception) {
-            // Elevation refused
-            Log.Warn($"Not restarted as administrator: {exception.Message}");
+            // Elevation refused, or cannot start
+            Log.Warn($"Not restarted: {exception.Message}");
             return;
         }
         Exit();
+    }
+
+    private static void OnOpenConfigFolderClick(object? sender, EventArgs e) {
+        try {
+            // Opens the folder with the file selected
+            Process.Start(new ProcessStartInfo("explorer.exe", $"/select,\"{ConfigFile.DefaultPath}\"") { UseShellExecute = true });
+        } catch (Win32Exception exception) {
+            Log.Warn($"Cannot open the config folder: {exception.Message}");
+        }
+    }
+
+    private static void OnOpenConfigClick(object? sender, EventArgs e) {
+        var path = ConfigFile.DefaultPath;
+        try {
+            Process.Start(new ProcessStartInfo(path) { UseShellExecute = true });
+        } catch (Win32Exception) {
+            // No program associated with .json files
+            try {
+                Process.Start(new ProcessStartInfo("notepad.exe", $"\"{path}\"") { UseShellExecute = true });
+            } catch (Win32Exception exception) {
+                Log.Warn($"Cannot open the config file: {exception.Message}");
+            }
+        }
     }
 
     /// Raised on a system thread.
