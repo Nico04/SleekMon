@@ -16,15 +16,17 @@ internal sealed class LhmSensorProvider : ISensorProvider {
     private readonly SensorSelection _selection;
     private readonly double _topProcessMinCpu;
     private readonly FpsSettings _fps;
+    private readonly string _fpsSession;
     private readonly Thread _thread;
     private readonly ManualResetEventSlim _stop = new();
     private volatile SensorSnapshot _latest = new() { Timestamp = DateTime.Now };
 
-    /// topProcessMinCpu: below this CPU %, no busiest program is shown.
-    public LhmSensorProvider(SensorSelection selection, double topProcessMinCpu, FpsSettings fps) {
+    /// topProcessMinCpu: below this CPU %, no busiest program is shown. fpsSession: FpsMonitor.AppSession or DiagnosticSession.
+    public LhmSensorProvider(SensorSelection selection, double topProcessMinCpu, FpsSettings fps, string fpsSession) {
         _selection = selection;
         _topProcessMinCpu = topProcessMinCpu;
         _fps = fps;
+        _fpsSession = fpsSession;
         _thread = new Thread(Run) { IsBackground = true, Name = "Sensors" };
     }
 
@@ -50,7 +52,7 @@ internal sealed class LhmSensorProvider : ISensorProvider {
             IsControllerEnabled = true
         };
         using var topProcessSampler = new TopProcessSampler(_topProcessMinCpu);
-        using var fpsMonitor = new FpsMonitor(_fps);
+        using var fpsMonitor = new FpsMonitor(_fps, _fpsSession);
         TopProcess? topProcess = null;
         try {
             var stopwatch = Stopwatch.StartNew();

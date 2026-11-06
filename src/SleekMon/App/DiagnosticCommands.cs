@@ -219,7 +219,7 @@ internal static class DiagnosticCommands {
 
         var config = new ConfigFile().Load();
         Log.Info($"Run: {duration.TotalMinutes} min, {config.Sensors}, {settings.Describe()}");
-        using var sensors = new LhmSensorProvider(config.Sensors, config.TopProcessMinCpu, config.Fps);
+        using var sensors = new LhmSensorProvider(config.Sensors, config.TopProcessMinCpu, config.Fps, FpsMonitor.DiagnosticSession);
         sensors.Start();
         RunLoop(settings, duration, 16, 16, (tick, _) => {
             // The clock shows the render time, not the reading time

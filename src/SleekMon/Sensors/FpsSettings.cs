@@ -5,7 +5,8 @@ namespace SleekMon.Sensors;
 /// in a row (and hidden once below for as long).
 internal sealed record FpsSettings {
     public int MinFps { get; init; } = 20;
-    public int MinSeconds { get; init; } = 3;
+    /// Long enough to skip the animations and scrolling of desktop apps (3 s did not, RESEARCH § 5).
+    public int MinSeconds { get; init; } = 5;
     /// Exe names ("GravityMark.exe", ".exe" optional), case-insensitive.
     public string[] Always { get; init; } = [];
     public string[] Never { get; init; } = [];

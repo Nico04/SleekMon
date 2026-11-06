@@ -9,8 +9,10 @@ namespace SleekMon.Sensors;
 /// Needs administrator rights (real-time ETW session); without them Sample returns null.
 /// Events arrive on the session thread; Sample is called once a second by the sensor thread, its only caller.
 internal sealed class FpsMonitor : IDisposable {
-    /// A crashed run leaves its session behind: the same name stops and recreates it.
-    private const string SessionName = "SleekMon-Fps";
+    /// Session names: a crashed run leaves its session behind, the same name stops and recreates it. Diagnostic commands
+    /// use their own, or they would stop the session of the app running alongside.
+    public const string AppSession = "SleekMon-Fps";
+    public const string DiagnosticSession = "SleekMon-Fps-Diagnostic";
     private static readonly Guid DxgKrnlProvider = new("802EC45A-1E99-4B83-9920-87C98277BA9D");
     // Base and Present keywords; the event ID filter, applied by Windows, then delivers Present_Info only
     private const ulong DxgKrnlKeywords = 0x1 | 0x8000000;
@@ -45,7 +47,7 @@ internal sealed class FpsMonitor : IDisposable {
     private int _otherStreak;
     private string? _loggedShownFor;
 
-    public FpsMonitor(FpsSettings settings) {
+    public FpsMonitor(FpsSettings settings, string sessionName) {
         _settings = settings;
         _always = Names(settings.Always);
         _never = Names(settings.Never);
@@ -55,7 +57,7 @@ internal sealed class FpsMonitor : IDisposable {
         }
 
         try {
-            _session = new TraceEventSession(SessionName) { StopOnDispose = true };
+            _session = new TraceEventSession(sessionName) { StopOnDispose = true };
             _session.EnableProvider(DxgKrnlProvider, TraceEventLevel.Informational, DxgKrnlKeywords,
                 new TraceEventProviderOptions { EventIDsToEnable = [PresentInfoId] });
             _session.Source.AllEvents += OnEvent;
@@ -98,7 +100,7 @@ internal sealed class FpsMonitor : IDisposable {
         } catch (Exception e) {
             Log.Error("FPS session failed", e);
         } finally {
-            // Stopped by someone else, for instance a second SleekMon with the same session name
+            // Stopped by someone else
             if (_running) Log.Warn("FPS session ended");
             _running = false;
         }

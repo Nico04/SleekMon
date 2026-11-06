@@ -6,7 +6,7 @@
   "topProcessMinCpu": 2,
   "fps": {
     "minFps": 20,
-    "minSeconds": 3,
+    "minSeconds": 5,
     "always": [],
     "never": []
   },
