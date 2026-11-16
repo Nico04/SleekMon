@@ -21,6 +21,11 @@ internal sealed record DisplayWorkerOptions {
     /// visible on the screen; larger tiles showed more (RESEARCH § 8).
     public int TileWidth { get; init; } = 16;
     public int TileHeight { get; init; } = 16;
+    /// A full frame goes through the screen at ~1.8 s (RESEARCH § 8) and nothing can make it faster: a shorter transfer
+    /// means the screen did not take the data, as when it is still starting up after the PC boots.
+    public TimeSpan MinFullFrameDuration { get; init; } = TimeSpan.FromMilliseconds(1300);
+    /// How long after connecting a lost full frame is sent again (screen kept off) before giving up and lighting up.
+    public TimeSpan FirstFrameTimeout { get; init; } = TimeSpan.FromSeconds(20);
     public TimeSpan RetryDelay { get; init; } = TimeSpan.FromSeconds(2);
     public TimeSpan StatisticsPeriod { get; init; } = TimeSpan.FromMinutes(1);
 }
@@ -62,6 +67,9 @@ internal sealed class DisplayWorker : IDisposable {
     private string? _lastProblem;
     /// Environment.TickCount64 of the next connection attempt.
     private long _nextAttempt;
+    /// Environment.TickCount64 of the last successful connection, and the full frames sent since that looked lost.
+    private long _connectedAt;
+    private int _lostFrames;
 
     private volatile ConnectionState _state = ConnectionState.Disconnected;
     private volatile string? _portName;
@@ -209,6 +217,8 @@ internal sealed class DisplayWorker : IDisposable {
             if (_sentOn == null) display.ScreenOff();
             _sentOn = false;
             SendFrame(display);
+            // The screen did not take the frame: it stays dark, the next frame submitted tries again
+            if (!_shownKnown) return Volatile.Read(ref _appliedVersion);
             display.ScreenOn();
             _sentOn = true;
         } else if (_hasLatest) {
@@ -224,9 +234,10 @@ internal sealed class DisplayWorker : IDisposable {
 
     private void SendFrame(RevADisplay display) {
         var stopwatch = Stopwatch.StartNew();
-        var rects = _shownKnown
-            ? FrameDiff.ChangedRects(_shown, _latest, Width, Height, _options.TileWidth, _options.TileHeight)
-            : [new PixelRect(0, 0, Width, Height)];
+        var fullFrame = !_shownKnown;
+        var rects = fullFrame
+            ? [new PixelRect(0, 0, Width, Height)]
+            : FrameDiff.ChangedRects(_shown, _latest, Width, Height, _options.TileWidth, _options.TileHeight);
         if (rects.Count == 0) return;
 
         var bytes = 0;
@@ -237,11 +248,36 @@ internal sealed class DisplayWorker : IDisposable {
             bytes += length;
         }
 
+        if (fullFrame && !CheckFullFrame(stopwatch.Elapsed)) return;
+
         // Only now does the screen show this frame
         _latest.CopyTo(_shown, 0);
         _shownKnown = true;
         _statistics.Add(bytes, rects.Count, stopwatch.Elapsed);
         SetState(ConnectionState.Connected);
+    }
+
+    /// False when the screen swallowed the frame and it must be sent again. Gives up after the timeout: a wrong threshold
+    /// must not keep the screen dark forever.
+    private bool CheckFullFrame(TimeSpan duration) {
+        if (duration >= _options.MinFullFrameDuration) {
+            if (_lostFrames > 0) Log.Info($"Screen took the first frame after {_lostFrames} lost");
+            _lostFrames = 0;
+            return true;
+        }
+
+        _lostFrames++;
+        var waited = TimeSpan.FromMilliseconds(Environment.TickCount64 - _connectedAt);
+        if (waited >= _options.FirstFrameTimeout) {
+            Log.Warn($"Full frame sent in {duration.TotalMilliseconds:F0} ms (expected ~1800), still after {_lostFrames} " +
+                $"tries in {waited.TotalSeconds:F0} s: giving up");
+            _lostFrames = 0;
+            return true;
+        }
+
+        Log.Warn($"Full frame sent in {duration.TotalMilliseconds:F0} ms (expected ~1800): the screen is probably " +
+            $"not ready, sending it again (try {_lostFrames})");
+        return false;
     }
 
     [MemberNotNullWhen(true, nameof(_display))]
@@ -270,6 +306,8 @@ internal sealed class DisplayWorker : IDisposable {
         _sentOn = null;
         _sentBrightness = null;
         _lastProblem = null;
+        _lostFrames = 0;
+        _connectedAt = Environment.TickCount64;
         _portName = port;
         Log.Info($"Screen connected on {port}");
         // Connected once the first full frame is shown
